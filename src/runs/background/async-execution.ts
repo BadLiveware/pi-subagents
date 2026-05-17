@@ -106,6 +106,7 @@ interface AsyncChainParams {
 	chainSkills?: string[];
 	sessionFilesByFlatIndex?: (string | undefined)[];
 	maxSubagentDepth: number;
+	nestedDelegationSkills?: string[] | string | false;
 	worktreeSetupHook?: string;
 	worktreeSetupHookTimeoutMs?: number;
 	controlConfig?: ResolvedControlConfig;
@@ -131,6 +132,7 @@ interface AsyncSingleParams {
 	modelOverride?: string;
 	availableModels?: AvailableModelInfo[];
 	maxSubagentDepth: number;
+	nestedDelegationSkills?: string[] | string | false;
 	worktreeSetupHook?: string;
 	worktreeSetupHookTimeoutMs?: number;
 	controlConfig?: ResolvedControlConfig;
@@ -231,6 +233,7 @@ export function executeAsyncChain(
 		sessionRoot,
 		sessionFilesByFlatIndex,
 		maxSubagentDepth,
+		nestedDelegationSkills,
 		worktreeSetupHook,
 		worktreeSetupHookTimeoutMs,
 		controlConfig,
@@ -329,6 +332,7 @@ export function executeAsyncChain(
 			outputPath,
 			outputMode: behavior.outputMode,
 			sessionFile,
+			nestedDelegationSkills,
 			maxSubagentDepth: resolveChildMaxSubagentDepth(maxSubagentDepth, a.maxSubagentDepth),
 		};
 	};
@@ -491,6 +495,7 @@ export function executeAsyncSingle(
 		sessionRoot,
 		sessionFile,
 		maxSubagentDepth,
+		nestedDelegationSkills,
 		worktreeSetupHook,
 		worktreeSetupHookTimeoutMs,
 		controlConfig,
@@ -554,6 +559,7 @@ export function executeAsyncSingle(
 						outputPath,
 						outputMode,
 						sessionFile,
+						nestedDelegationSkills,
 						maxSubagentDepth: resolveChildMaxSubagentDepth(maxSubagentDepth, agentConfig.maxSubagentDepth),
 					},
 				],

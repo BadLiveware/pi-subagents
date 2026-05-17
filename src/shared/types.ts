@@ -481,6 +481,8 @@ export interface RunSyncOptions {
 	preferredModelProvider?: string;
 	/** Skills to inject (overrides agent default if provided) */
 	skills?: string[];
+	/** Skill names to hide from children when nested subagent delegation is unavailable */
+	nestedDelegationSkills?: string[] | string | false;
 }
 
 export type IntercomBridgeMode = "off" | "fork-only" | "always";
@@ -500,6 +502,7 @@ export interface ExtensionConfig {
 	forceTopLevelAsync?: boolean;
 	defaultSessionDir?: string;
 	maxSubagentDepth?: number;
+	nestedDelegationSkills?: string[] | string | false;
 	control?: ControlConfig;
 	parallel?: TopLevelParallelConfig;
 	worktreeSetupHook?: string;

@@ -153,6 +153,7 @@ async function runSingleAttempt(
 		mcpDirectTools: agent.mcpDirectTools,
 		denyTools: agent.denyTools,
 		skillPaths: shared.resolvedSkills?.map((skill) => skill.path),
+		nestedDelegationSkills: options.nestedDelegationSkills,
 		promptFileStem: agent.name,
 		intercomSessionName: options.intercomSessionName,
 		orchestratorIntercomTarget: options.orchestratorIntercomTarget,

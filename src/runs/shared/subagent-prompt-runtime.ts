@@ -1,5 +1,8 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { SUBAGENT_DENY_TOOLS_ENV, SUBAGENT_SKILL_PATHS_ENV } from "./pi-args.ts";
+import { SUBAGENT_DENY_TOOLS_ENV, SUBAGENT_NESTED_DELEGATION_SKILLS_ENV, SUBAGENT_SKILL_PATHS_ENV } from "./pi-args.ts";
+import { DEFAULT_NESTED_DELEGATION_SKILLS } from "../../shared/nested-delegation.ts";
 
 const SUBAGENT_INHERIT_PROJECT_CONTEXT_ENV = "PI_SUBAGENT_INHERIT_PROJECT_CONTEXT";
 const SUBAGENT_INHERIT_SKILLS_ENV = "PI_SUBAGENT_INHERIT_SKILLS";
@@ -29,7 +32,6 @@ const PARENT_ONLY_CUSTOM_MESSAGE_TYPES = new Set([
 	"subagent-control",
 	"subagent-control-notice",
 ]);
-const SUBAGENT_ORCHESTRATION_SKILL_NAME_PATTERN = /<name>\s*pi-subagents\s*<\/name>/;
 const PROJECT_CONTEXT_HEADER = "\n\n# Project Context\n\nProject-specific instructions and guidelines:\n\n";
 const SKILLS_HEADER = "\n\nThe following skills provide specialized instructions for specific tasks.";
 const DATE_HEADER = "\nCurrent date:";
@@ -158,10 +160,33 @@ export function stripInheritedSkills(prompt: string): string {
 	return `${prompt.slice(0, startIndex)}${prompt.slice(endIndex)}`;
 }
 
-export function stripSubagentOrchestrationSkill(prompt: string): string {
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeSkillName(value: string): string {
+	return value.trim().toLowerCase();
+}
+
+function readNestedDelegationSkillNames(): string[] {
+	const raw = process.env[SUBAGENT_NESTED_DELEGATION_SKILLS_ENV];
+	if (raw === undefined) return [...DEFAULT_NESTED_DELEGATION_SKILLS];
+	return parseJsonStringArrayEnv(SUBAGENT_NESTED_DELEGATION_SKILLS_ENV);
+}
+
+export function stripNestedDelegationSkills(prompt: string, skillNames: string[]): string {
+	const names = [...new Set(skillNames.map(normalizeSkillName).filter(Boolean))];
+	if (names.length === 0) return prompt;
+	const namePattern = names.map(escapeRegExp).join("|");
+	const explicitSkillPattern = new RegExp(`\\n{0,2}<skill\\s+name=["'](${namePattern})["'][^>]*>[\\s\\S]*?<\\/skill>\\n{0,2}`, "gi");
+	const namedSkillPattern = new RegExp(`<name>\\s*(${namePattern})\\s*<\\/name>`, "i");
 	return prompt
-		.replace(/\n{0,2}<skill\s+name=["']pi-subagents["'][^>]*>[\s\S]*?<\/skill>\n{0,2}/g, "\n\n")
-		.replace(/[ \t]*<skill>\s*[\s\S]*?<\/skill>\s*/g, (block) => SUBAGENT_ORCHESTRATION_SKILL_NAME_PATTERN.test(block) ? "" : block);
+		.replace(explicitSkillPattern, "\n\n")
+		.replace(/[ \t]*<skill>\s*[\s\S]*?<\/skill>\s*/g, (block) => namedSkillPattern.test(block) ? "" : block);
+}
+
+export function stripSubagentOrchestrationSkill(prompt: string): string {
+	return stripNestedDelegationSkills(prompt, ["pi-subagents"]);
 }
 
 function hasSubagentDepthRemaining(): boolean {
@@ -178,6 +203,41 @@ function activeToolsAllowNestedSubagents(pi: ExtensionAPI): boolean {
 
 function nestedSubagentDelegationAllowed(pi: ExtensionAPI): boolean {
 	return hasSubagentDepthRemaining() && activeToolsAllowNestedSubagents(pi);
+}
+
+function readSkillNameFromPath(skillPath: string): string | undefined {
+	const filePath = path.basename(skillPath).toLowerCase() === "skill.md"
+		? skillPath
+		: fs.existsSync(path.join(skillPath, "SKILL.md"))
+			? path.join(skillPath, "SKILL.md")
+			: skillPath;
+	try {
+		const content = fs.readFileSync(filePath, "utf-8").replace(/\r\n/g, "\n");
+		if (content.startsWith("---")) {
+			const endIndex = content.indexOf("\n---", 3);
+			if (endIndex !== -1) {
+				const frontmatter = content.slice(3, endIndex).trim();
+				const match = frontmatter.match(/^name:\s*(.+)$/m);
+				const name = match?.[1]?.trim().replace(/^['\"]|['\"]$/g, "");
+				if (name) return name;
+			}
+		}
+	} catch {
+		// Fall back to path-derived names for compatibility with explicit custom paths.
+	}
+	const baseName = path.basename(skillPath);
+	return baseName.toLowerCase() === "skill.md"
+		? path.basename(path.dirname(skillPath))
+		: path.basename(skillPath, path.extname(skillPath));
+}
+
+export function filterNestedDelegationSkillPaths(skillPaths: string[], skillNames: string[]): string[] {
+	const names = new Set(skillNames.map(normalizeSkillName).filter(Boolean));
+	if (names.size === 0) return skillPaths;
+	return skillPaths.filter((skillPath) => {
+		const name = readSkillNameFromPath(skillPath);
+		return !name || !names.has(normalizeSkillName(name));
+	});
 }
 
 function stripExistingBoundary(prompt: string): string {
@@ -200,7 +260,7 @@ export function rewriteSubagentPrompt(
 		rewritten = stripInheritedSkills(rewritten);
 	}
 	if (!options.allowNestedSubagents) {
-		rewritten = stripSubagentOrchestrationSkill(rewritten);
+		rewritten = stripNestedDelegationSkills(rewritten, readNestedDelegationSkillNames());
 	}
 	const boundary = options.allowNestedSubagents
 		? CHILD_SUBAGENT_NESTED_DELEGATION_INSTRUCTIONS
@@ -260,7 +320,10 @@ export function stripParentOnlySubagentMessages(
 export default function registerSubagentPromptRuntime(pi: ExtensionAPI): void {
 	pi.on("resources_discover", () => {
 		const skillPaths = parseJsonStringArrayEnv(SUBAGENT_SKILL_PATHS_ENV);
-		return skillPaths.length > 0 ? { skillPaths } : undefined;
+		const visibleSkillPaths = nestedSubagentDelegationAllowed(pi)
+			? skillPaths
+			: filterNestedDelegationSkillPaths(skillPaths, readNestedDelegationSkillNames());
+		return visibleSkillPaths.length > 0 ? { skillPaths: visibleSkillPaths } : undefined;
 	});
 
 	pi.on("session_start", () => {

@@ -112,6 +112,7 @@ interface ParallelChainRunInput {
 	totalSteps: number;
 	worktreeSetup?: WorktreeSetup;
 	maxSubagentDepth: number;
+	nestedDelegationSkills?: string[] | string | false;
 }
 
 function buildChainExecutionDetails(input: ChainExecutionDetailsInput): Details {
@@ -240,6 +241,7 @@ async function runParallelChainTasks(input: ParallelChainRunInput): Promise<Sing
 				outputPath,
 				outputMode: behavior.outputMode,
 				maxSubagentDepth,
+				nestedDelegationSkills: input.nestedDelegationSkills,
 				controlConfig: input.controlConfig,
 				onControlEvent: input.onControlEvent,
 				intercomSessionName: input.childIntercomTarget?.(task.agent, input.globalTaskIndex + taskIndex),
@@ -331,6 +333,7 @@ interface ChainExecutionParams {
 	chainSkills?: string[];
 	chainDir?: string;
 	maxSubagentDepth: number;
+	nestedDelegationSkills?: string[] | string | false;
 	worktreeSetupHook?: string;
 	worktreeSetupHookTimeoutMs?: number;
 }
@@ -789,6 +792,7 @@ export async function executeChain(params: ChainExecutionParams): Promise<ChainE
 				outputPath,
 				outputMode: behavior.outputMode,
 				maxSubagentDepth,
+				nestedDelegationSkills: params.nestedDelegationSkills,
 				controlConfig,
 				onControlEvent,
 				intercomSessionName: childIntercomTarget?.(seqStep.agent, globalTaskIndex),

@@ -15,6 +15,7 @@ export interface RunnerSubagentStep {
 	inheritSkills: boolean;
 	skills?: string[];
 	skillPaths?: string[];
+	nestedDelegationSkills?: string[] | string | false;
 	outputPath?: string;
 	outputMode?: "inline" | "file-only";
 	sessionFile?: string;

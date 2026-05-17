@@ -9,7 +9,7 @@
  * Toggle: async parameter (default: false, configurable via config.json)
  *
  * Config file: ~/.pi/agent/extensions/subagent/config.json
- *   { "asyncByDefault": true, "forceTopLevelAsync": true, "maxSubagentDepth": 1, "intercomBridge": { "mode": "always", "instructionFile": "./intercom-bridge.md" }, "worktreeSetupHook": "./scripts/setup-worktree.mjs" }
+ *   { "asyncByDefault": true, "forceTopLevelAsync": true, "maxSubagentDepth": 1, "nestedDelegationSkills": ["pi-subagents"], "intercomBridge": { "mode": "always", "instructionFile": "./intercom-bridge.md" }, "worktreeSetupHook": "./scripts/setup-worktree.mjs" }
  */
 
 import * as fs from "node:fs";
@@ -39,6 +39,7 @@ import {
 	type Details,
 	type ExtensionConfig,
 	type SubagentState,
+	normalizeMaxSubagentDepth,
 	ASYNC_DIR,
 	DEFAULT_ARTIFACT_CONFIG,
 	RESULTS_DIR,
@@ -86,6 +87,13 @@ function loadConfig(): ExtensionConfig {
 
 function expandTilde(p: string): string {
 	return p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
+}
+
+function shouldRegisterSubagentExtension(): boolean {
+	if (process.env[SUBAGENT_CHILD_ENV] !== "1") return true;
+	const depth = Number(process.env.PI_SUBAGENT_DEPTH);
+	const maxDepth = normalizeMaxSubagentDepth(process.env.PI_SUBAGENT_MAX_DEPTH);
+	return Number.isFinite(depth) && maxDepth !== undefined && depth < maxDepth;
 }
 
 /**
@@ -220,7 +228,7 @@ class SubagentControlNoticeComponent implements Component {
 }
 
 export default function registerSubagentExtension(pi: ExtensionAPI): void {
-	if (process.env[SUBAGENT_CHILD_ENV] === "1") return;
+	if (!shouldRegisterSubagentExtension()) return;
 	const globalStore = globalThis as Record<string, unknown>;
 	const runtimeCleanupStoreKey = "__piSubagentRuntimeCleanup";
 	const previousRuntimeCleanup = globalStore[runtimeCleanupStoreKey];

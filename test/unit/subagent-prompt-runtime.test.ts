@@ -5,13 +5,15 @@ import registerSubagentPromptRuntime, {
 	CHILD_SUBAGENT_NESTED_DELEGATION_INSTRUCTIONS,
 	SUBAGENT_INTERCOM_SESSION_NAME_ENV,
 	filterDeniedTools,
+	filterNestedDelegationSkillPaths,
 	rewriteSubagentPrompt,
 	stripInheritedSkills,
 	stripParentOnlySubagentMessages,
 	stripProjectContext,
+	stripNestedDelegationSkills,
 	stripSubagentOrchestrationSkill,
 } from "../../src/runs/shared/subagent-prompt-runtime.ts";
-import { SUBAGENT_DENY_TOOLS_ENV, SUBAGENT_SKILL_PATHS_ENV } from "../../src/runs/shared/pi-args.ts";
+import { SUBAGENT_DENY_TOOLS_ENV, SUBAGENT_NESTED_DELEGATION_SKILLS_ENV, SUBAGENT_SKILL_PATHS_ENV } from "../../src/runs/shared/pi-args.ts";
 
 const envSnapshot = {
 	PI_SUBAGENT_INHERIT_PROJECT_CONTEXT: process.env.PI_SUBAGENT_INHERIT_PROJECT_CONTEXT,
@@ -19,6 +21,7 @@ const envSnapshot = {
 	PI_SUBAGENT_INTERCOM_SESSION_NAME: process.env.PI_SUBAGENT_INTERCOM_SESSION_NAME,
 	PI_SUBAGENT_DENY_TOOLS: process.env.PI_SUBAGENT_DENY_TOOLS,
 	PI_SUBAGENT_SKILL_PATHS: process.env.PI_SUBAGENT_SKILL_PATHS,
+	PI_SUBAGENT_NESTED_DELEGATION_SKILLS: process.env.PI_SUBAGENT_NESTED_DELEGATION_SKILLS,
 	PI_SUBAGENT_DEPTH: process.env.PI_SUBAGENT_DEPTH,
 	PI_SUBAGENT_MAX_DEPTH: process.env.PI_SUBAGENT_MAX_DEPTH,
 };
@@ -51,6 +54,8 @@ afterEach(() => {
 	else process.env.PI_SUBAGENT_DENY_TOOLS = envSnapshot.PI_SUBAGENT_DENY_TOOLS;
 	if (envSnapshot.PI_SUBAGENT_SKILL_PATHS === undefined) delete process.env.PI_SUBAGENT_SKILL_PATHS;
 	else process.env.PI_SUBAGENT_SKILL_PATHS = envSnapshot.PI_SUBAGENT_SKILL_PATHS;
+	if (envSnapshot.PI_SUBAGENT_NESTED_DELEGATION_SKILLS === undefined) delete process.env.PI_SUBAGENT_NESTED_DELEGATION_SKILLS;
+	else process.env.PI_SUBAGENT_NESTED_DELEGATION_SKILLS = envSnapshot.PI_SUBAGENT_NESTED_DELEGATION_SKILLS;
 	if (envSnapshot.PI_SUBAGENT_DEPTH === undefined) delete process.env.PI_SUBAGENT_DEPTH;
 	else process.env.PI_SUBAGENT_DEPTH = envSnapshot.PI_SUBAGENT_DEPTH;
 	if (envSnapshot.PI_SUBAGENT_MAX_DEPTH === undefined) delete process.env.PI_SUBAGENT_MAX_DEPTH;
@@ -185,6 +190,25 @@ describe("subagent prompt runtime", () => {
 
 		assert.ok(!rewritten.includes("Do not keep this"));
 		assert.ok(rewritten.includes("<skill name=\"safe-bash\">"));
+	});
+
+	it("strips configured nested-delegation skills when delegation is unavailable", () => {
+		const prompt = `${SKILLS_SECTION}\n\n<skill name=\"custom-orchestrator\">\nDo not keep custom orchestration.\n</skill>`;
+		const rewritten = stripNestedDelegationSkills(prompt, ["pi-subagents", "custom-orchestrator"]);
+
+		assert.ok(rewritten.includes("<name>safe-bash</name>"));
+		assert.ok(!rewritten.includes("<name>pi-subagents</name>"));
+		assert.ok(!rewritten.includes("custom orchestration"));
+	});
+
+	it("filters explicit nested-delegation skill resource paths", () => {
+		assert.deepEqual(
+			filterNestedDelegationSkillPaths(
+				["/repo/.pi/skills/pi-subagents/SKILL.md", "/repo/.pi/skills/custom-orchestrator/SKILL.md", "/repo/.pi/skills/safe-bash/SKILL.md"],
+				["pi-subagents", "custom-orchestrator"],
+			),
+			["/repo/.pi/skills/safe-bash/SKILL.md"],
+		);
 	});
 
 	it("strips parent-only subagent custom messages from forked child context", () => {

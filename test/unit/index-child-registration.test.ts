@@ -108,7 +108,7 @@ describe("subagent extension child mode", () => {
 		);
 	});
 
-	it("returns before registering parent tools, slash commands, renderers, or event handlers", () => {
+	it("returns before registering parent tools, slash commands, renderers, or event handlers when depth is unavailable", () => {
 		const script = String.raw`
 			import registerSubagentExtension from "./src/extension/index.ts";
 			import { SUBAGENT_CHILD_ENV } from "./src/runs/shared/pi-args.ts";
@@ -126,6 +126,47 @@ describe("subagent extension child mode", () => {
 			if (calls.length > 0) {
 				throw new Error("Unexpected child-mode registrations: " + calls.join(", "));
 			}
+		`;
+
+		execFileSync(
+			process.execPath,
+			[
+				"--experimental-transform-types",
+				"--import",
+				"./test/support/register-loader.mjs",
+				"--input-type=module",
+				"--eval",
+				script,
+			],
+			{ cwd: projectRoot, stdio: "pipe" },
+		);
+	});
+
+	it("registers the subagent tool in child mode when depth remains", () => {
+		const script = String.raw`
+			import registerSubagentExtension from "./src/extension/index.ts";
+			import { SUBAGENT_CHILD_ENV } from "./src/runs/shared/pi-args.ts";
+			process.env[SUBAGENT_CHILD_ENV] = "1";
+			process.env.PI_SUBAGENT_DEPTH = "1";
+			process.env.PI_SUBAGENT_MAX_DEPTH = "2";
+			const events = { on() { return () => {}; }, emit() {} };
+			let registeredTool;
+			const fakePi = new Proxy({
+				events,
+				registerTool(tool) { registeredTool = tool; },
+				registerCommand() {},
+				registerShortcut() {},
+				registerMessageRenderer() {},
+				sendMessage() {},
+				getSessionName() { return undefined; },
+			}, {
+				get(target, prop) {
+					if (prop in target) return target[prop];
+					return () => undefined;
+				},
+			});
+			registerSubagentExtension(fakePi);
+			if (!registeredTool) throw new Error("tool not registered for nested child");
 		`;
 
 		execFileSync(

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizeNestedDelegationSkills } from "../../shared/nested-delegation.ts";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 const TASK_ARG_LIMIT = 8000;
@@ -10,6 +11,7 @@ export const SUBAGENT_CHILD_ENV = "PI_SUBAGENT_CHILD";
 export const SUBAGENT_ORCHESTRATOR_TARGET_ENV = "PI_SUBAGENT_ORCHESTRATOR_TARGET";
 export const SUBAGENT_DENY_TOOLS_ENV = "PI_SUBAGENT_DENY_TOOLS";
 export const SUBAGENT_SKILL_PATHS_ENV = "PI_SUBAGENT_SKILL_PATHS";
+export const SUBAGENT_NESTED_DELEGATION_SKILLS_ENV = "PI_SUBAGENT_NESTED_DELEGATION_SKILLS";
 export const SUBAGENT_RUN_ID_ENV = "PI_SUBAGENT_RUN_ID";
 export const SUBAGENT_CHILD_AGENT_ENV = "PI_SUBAGENT_CHILD_AGENT";
 export const SUBAGENT_CHILD_INDEX_ENV = "PI_SUBAGENT_CHILD_INDEX";
@@ -31,6 +33,7 @@ interface BuildPiArgsInput {
 	mcpDirectTools?: string[];
 	denyTools?: string[];
 	skillPaths?: string[];
+	nestedDelegationSkills?: string[] | string | false;
 	promptFileStem?: string;
 	intercomSessionName?: string;
 	orchestratorIntercomTarget?: string;
@@ -161,6 +164,12 @@ export function buildPiArgs(input: BuildPiArgsInput): BuildPiArgsResult {
 		env[SUBAGENT_SKILL_PATHS_ENV] = JSON.stringify(input.skillPaths);
 	} else {
 		env[SUBAGENT_SKILL_PATHS_ENV] = "__none__";
+	}
+	const nestedDelegationSkills = normalizeNestedDelegationSkills(input.nestedDelegationSkills);
+	if (nestedDelegationSkills.length > 0) {
+		env[SUBAGENT_NESTED_DELEGATION_SKILLS_ENV] = JSON.stringify(nestedDelegationSkills);
+	} else {
+		env[SUBAGENT_NESTED_DELEGATION_SKILLS_ENV] = "__none__";
 	}
 
 	return { args, env, tempDir };

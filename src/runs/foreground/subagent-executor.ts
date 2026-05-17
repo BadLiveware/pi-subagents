@@ -490,6 +490,7 @@ async function resumeAsyncRun(input: {
 		sessionRoot: input.deps.getSubagentSessionRoot(parentSessionFile),
 		sessionFile: target.sessionFile,
 		maxSubagentDepth: resolveCurrentMaxSubagentDepth(input.deps.config.maxSubagentDepth),
+		nestedDelegationSkills: input.deps.config.nestedDelegationSkills,
 		worktreeSetupHook: input.deps.config.worktreeSetupHook,
 		worktreeSetupHookTimeoutMs: input.deps.config.worktreeSetupHookTimeoutMs,
 		controlConfig: resolveControlConfig(input.deps.config.control, input.params.control),
@@ -934,6 +935,7 @@ function runAsyncPath(data: ExecutionContextData, deps: ExecutorDeps): AgentTool
 			chainSkills: [],
 			sessionFilesByFlatIndex: params.tasks.map((_, index) => sessionFileForIndex(index)),
 			maxSubagentDepth: currentMaxSubagentDepth,
+			nestedDelegationSkills: deps.config.nestedDelegationSkills,
 			worktreeSetupHook: deps.config.worktreeSetupHook,
 			worktreeSetupHookTimeoutMs: deps.config.worktreeSetupHookTimeoutMs,
 			controlConfig,
@@ -961,6 +963,7 @@ function runAsyncPath(data: ExecutionContextData, deps: ExecutorDeps): AgentTool
 			chainSkills,
 			sessionFilesByFlatIndex: collectChainSessionFiles(chain, sessionFileForIndex),
 			maxSubagentDepth: currentMaxSubagentDepth,
+			nestedDelegationSkills: deps.config.nestedDelegationSkills,
 			worktreeSetupHook: deps.config.worktreeSetupHook,
 			worktreeSetupHookTimeoutMs: deps.config.worktreeSetupHookTimeoutMs,
 			controlConfig,
@@ -1003,6 +1006,7 @@ function runAsyncPath(data: ExecutionContextData, deps: ExecutorDeps): AgentTool
 			outputMode: effectiveOutputMode,
 			modelOverride,
 			maxSubagentDepth,
+			nestedDelegationSkills: deps.config.nestedDelegationSkills,
 			worktreeSetupHook: deps.config.worktreeSetupHook,
 			worktreeSetupHookTimeoutMs: deps.config.worktreeSetupHookTimeoutMs,
 			controlConfig,
@@ -1063,6 +1067,7 @@ async function runChainPath(data: ExecutionContextData, deps: ExecutorDeps): Pro
 		chainSkills,
 		chainDir: params.chainDir,
 		maxSubagentDepth: currentMaxSubagentDepth,
+		nestedDelegationSkills: deps.config.nestedDelegationSkills,
 		worktreeSetupHook: deps.config.worktreeSetupHook,
 		worktreeSetupHookTimeoutMs: deps.config.worktreeSetupHookTimeoutMs,
 	});
@@ -1098,6 +1103,7 @@ async function runChainPath(data: ExecutionContextData, deps: ExecutorDeps): Pro
 			chainSkills: chainResult.requestedAsync.chainSkills,
 			sessionFilesByFlatIndex: collectChainSessionFiles(asyncChain, sessionFileForIndex),
 			maxSubagentDepth: currentMaxSubagentDepth,
+			nestedDelegationSkills: deps.config.nestedDelegationSkills,
 			worktreeSetupHook: deps.config.worktreeSetupHook,
 			worktreeSetupHookTimeoutMs: deps.config.worktreeSetupHookTimeoutMs,
 			controlConfig,
@@ -1144,6 +1150,7 @@ interface ForegroundParallelRunInput {
 	maxOutput?: MaxOutputConfig;
 	paramsCwd: string;
 	maxSubagentDepths: number[];
+	nestedDelegationSkills?: string[] | string | false;
 	availableModels: ModelInfo[];
 	modelOverrides: (string | undefined)[];
 	behaviors: Array<ReturnType<typeof resolveStepBehavior>>;
@@ -1307,6 +1314,7 @@ async function runForegroundParallelTasks(input: ForegroundParallelRunInput): Pr
 			outputPath,
 			outputMode: behavior?.outputMode,
 			maxSubagentDepth: input.maxSubagentDepths[index],
+			nestedDelegationSkills: input.nestedDelegationSkills,
 			controlConfig: input.controlConfig,
 			onControlEvent: input.onControlEvent,
 			intercomSessionName: input.childIntercomTarget?.(task.agent, index),
@@ -1521,6 +1529,7 @@ async function runParallelPath(data: ExecutionContextData, deps: ExecutorDeps): 
 				chainSkills: [],
 				sessionFilesByFlatIndex: tasks.map((_, index) => sessionFileForIndex(index)),
 				maxSubagentDepth: currentMaxSubagentDepth,
+				nestedDelegationSkills: deps.config.nestedDelegationSkills,
 				worktreeSetupHook: deps.config.worktreeSetupHook,
 				worktreeSetupHookTimeoutMs: deps.config.worktreeSetupHookTimeoutMs,
 				controlConfig,
@@ -1596,6 +1605,7 @@ async function runParallelPath(data: ExecutionContextData, deps: ExecutorDeps): 
 			foregroundControl,
 			concurrencyLimit: parallelConcurrency,
 			maxSubagentDepths,
+			nestedDelegationSkills: deps.config.nestedDelegationSkills,
 			liveResults,
 			liveProgress,
 			onUpdate,
@@ -1786,6 +1796,7 @@ async function runSinglePath(data: ExecutionContextData, deps: ExecutorDeps): Pr
 				outputMode: effectiveOutputMode,
 				modelOverride,
 				maxSubagentDepth,
+				nestedDelegationSkills: deps.config.nestedDelegationSkills,
 				worktreeSetupHook: deps.config.worktreeSetupHook,
 				worktreeSetupHookTimeoutMs: deps.config.worktreeSetupHookTimeoutMs,
 				controlConfig,
@@ -1864,6 +1875,7 @@ async function runSinglePath(data: ExecutionContextData, deps: ExecutorDeps): Pr
 		outputPath,
 		outputMode: effectiveOutputMode,
 		maxSubagentDepth,
+		nestedDelegationSkills: deps.config.nestedDelegationSkills,
 		onUpdate: forwardSingleUpdate,
 		controlConfig,
 		onControlEvent,
