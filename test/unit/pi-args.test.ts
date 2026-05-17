@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { applyThinkingSuffix, buildPiArgs } from "../../src/runs/shared/pi-args.ts";
+import { SUBAGENT_DENY_TOOLS_ENV, applyThinkingSuffix, buildPiArgs } from "../../src/runs/shared/pi-args.ts";
 
 describe("buildPiArgs session wiring", () => {
 	it("uses --session when sessionFile is provided", () => {
@@ -139,6 +139,35 @@ describe("buildPiArgs system prompt mode wiring", () => {
 		assert.equal(env.PI_SUBAGENT_CHILD, "1");
 		assert.equal(env.PI_SUBAGENT_INHERIT_PROJECT_CONTEXT, "0");
 		assert.equal(env.PI_SUBAGENT_INHERIT_SKILLS, "1");
+		assert.equal(env[SUBAGENT_DENY_TOOLS_ENV], "__none__");
+	});
+
+	it("passes denied tools through env", () => {
+		const { env } = buildPiArgs({
+			baseArgs: ["-p"],
+			task: "hello",
+			sessionEnabled: false,
+			inheritProjectContext: false,
+			inheritSkills: false,
+			denyTools: ["subagent", "mcp:github/create_pull_request"],
+		});
+
+		assert.equal(env[SUBAGENT_DENY_TOOLS_ENV], "subagent,mcp:github/create_pull_request");
+		assert.equal(env.MCP_DIRECT_TOOLS, undefined);
+	});
+
+	it("prevents configured direct MCP leakage when denyTools is combined with a tool allowlist", () => {
+		const { env } = buildPiArgs({
+			baseArgs: ["-p"],
+			task: "hello",
+			sessionEnabled: false,
+			inheritProjectContext: false,
+			inheritSkills: false,
+			tools: ["read", "bash"],
+			denyTools: ["subagent"],
+		});
+
+		assert.equal(env.MCP_DIRECT_TOOLS, "__none__");
 	});
 
 	it("passes child intercom and orchestrator metadata through env", () => {

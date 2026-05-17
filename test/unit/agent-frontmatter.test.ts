@@ -104,6 +104,44 @@ Inspect code
 	});
 });
 
+describe("agent frontmatter denyTools", () => {
+	it("serializes denyTools into agent frontmatter", () => {
+		const agent: AgentConfig = {
+			name: "worker",
+			description: "Worker",
+			systemPrompt: "Do work",
+			systemPromptMode: "replace",
+			inheritProjectContext: false,
+			inheritSkills: false,
+			source: "project",
+			filePath: "/tmp/worker.md",
+			denyTools: ["subagent", "mcp:github/create_pull_request"],
+		};
+
+		const serialized = serializeAgent(agent);
+		assert.match(serialized, /denyTools: subagent, mcp:github\/create_pull_request/);
+	});
+
+	it("parses denyTools from discovered agent frontmatter", () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagents-agent-deny-tools-frontmatter-"));
+		tempDirs.push(dir);
+		const agentsDir = path.join(dir, ".pi", "agents");
+		fs.mkdirSync(agentsDir, { recursive: true });
+		fs.writeFileSync(path.join(agentsDir, "worker.md"), `---
+name: worker
+description: Worker
+denyTools: subagent, mcp:github/create_pull_request
+---
+
+Do work
+`, "utf-8");
+
+		const result = discoverAgents(dir, "project");
+		const worker = result.agents.find((agent) => agent.name === "worker");
+		assert.deepEqual(worker?.denyTools, ["subagent", "mcp:github/create_pull_request"]);
+	});
+});
+
 describe("agent frontmatter fallbackModels", () => {
 	it("serializes fallbackModels into agent frontmatter", () => {
 		const agent: AgentConfig = {

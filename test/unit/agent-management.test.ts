@@ -129,6 +129,23 @@ Inspect
 		assert.doesNotMatch(content, /^package:/m);
 	});
 
+	it("creates agents with denyTools config", () => {
+		const ctx = { cwd: tempDir, modelRegistry: { getAvailable: () => [] } };
+		const result = handleCreate(
+			{ config: { name: "Worker", description: "Worker", scope: "project", denyTools: "subagent, mcp:github/create_pull_request" } },
+			ctx,
+		);
+
+		assert.equal(result.isError, false);
+		const filePath = path.join(tempDir, ".pi", "agents", "worker.md");
+		const content = fs.readFileSync(filePath, "utf-8");
+		assert.match(content, /^denyTools: subagent, mcp:github\/create_pull_request$/m);
+
+		const got = handleManagementAction("get", { agent: "worker" }, ctx);
+		assert.equal(got.isError, false);
+		assert.match(readText(got), /Denied tools: subagent, mcp:github\/create_pull_request/);
+	});
+
 	it("creates delegate with its builtin prompt defaults", () => {
 		const result = handleCreate(
 			{ config: { name: "delegate", description: "Delegate helper", scope: "project" } },

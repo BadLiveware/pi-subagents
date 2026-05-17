@@ -445,7 +445,8 @@ Important fields:
 | Field | Notes |
 |-------|-------|
 | `package` | Optional package identifier. A file with `name: scout` and `package: code-analysis` registers as `code-analysis.scout`; serialization keeps `name` and `package` separate. |
-| `tools` | Builtin tool allowlist. `mcp:` entries select direct MCP tools when `pi-mcp-adapter` is installed. |
+| `tools` | Tool allowlist. Regular names limit active tools; `mcp:` entries select direct MCP tools when `pi-mcp-adapter` is installed. |
+| `denyTools` | Tool denylist applied after normal tool discovery. Use this to inherit normal tools while removing specific tools such as `subagent` or `mcp:github/create_pull_request`. |
 | `extensions` | Omitted means normal extensions; empty means no extensions; comma-separated values allowlist specific extensions. |
 | `model` | Default model. Bare ids prefer the current provider when possible, then unique registry matches. |
 | `fallbackModels` | Ordered backup models for provider/model failures such as quota, auth, timeout, or unavailable model. Ordinary task failures do not trigger fallback. |
@@ -463,15 +464,19 @@ Important fields:
 
 ### Tool and extension selection
 
-If `tools` is omitted, `pi-subagents` does not pass `--tools`, so the child gets Pi’s normal builtin tools. If `tools` is present, regular tool names become an explicit allowlist. `mcp:` entries are split out and forwarded as direct MCP selections. Path-like `tools` entries, such as extension paths or `.ts`/`.js` files, are treated as tool-extension paths rather than builtin tool names.
+If `tools` is omitted, `pi-subagents` does not pass `--tools`, so the child gets Pi’s normal builtin tools and extension tools. If `tools` is present, regular tool names become an explicit allowlist. `mcp:` entries are split out and forwarded as direct MCP selections. Path-like `tools` entries, such as extension paths or `.ts`/`.js` files, are treated as tool-extension paths rather than builtin tool names.
+
+Use `denyTools` when you want blacklist behavior: inherit the normal tool set but remove a few unsafe or parent-only tools. Deny entries match builtin/direct tool names, and `mcp:` entries can name a server (`mcp:chrome-devtools`) or a server tool (`mcp:github/create_pull_request`). Server-level MCP entries match the adapter's usual prefixed direct tool names; tool-level entries also cover unprefixed direct tools.
 
 Examples:
 
 - `tools` omitted and `extensions` omitted: normal builtins and normal extensions.
+- `denyTools: subagent`: normal tools except nested subagent delegation.
+- `denyTools: subagent, mcp:github/create_pull_request`: normal tools except nested delegation and that direct GitHub MCP tool.
 - `tools: mcp:chrome-devtools`: normal builtins plus direct Chrome DevTools MCP tools.
 - `tools: read, bash, mcp:chrome-devtools`: only `read` and `bash` as builtins, plus direct Chrome DevTools MCP tools.
 
-Direct MCP tools require [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter). Subagents only receive direct MCP tools when `mcp:` entries are listed in their frontmatter; global `directTools: true` in `mcp.json` is not enough by itself. The generic `mcp` proxy tool can still be used for discovery when available. The adapter caches tool metadata at startup, so after connecting a new MCP server for the first time, restart Pi before relying on direct tools.
+Direct MCP tools require [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter). Subagents receive direct MCP tools when `mcp:` entries are listed in `tools`. Agents with `denyTools` and no `tools` allowlist inherit the child Pi session's configured direct MCP tools first, then remove denied matches. The generic `mcp` proxy tool can still be used for discovery when available. The adapter caches tool metadata at startup, so after connecting a new MCP server for the first time, restart Pi before relying on direct tools.
 
 `extensions` controls child extension loading:
 

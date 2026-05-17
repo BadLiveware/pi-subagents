@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { SUBAGENT_DENY_TOOLS_ENV } from "./pi-args.ts";
 
 const SUBAGENT_INHERIT_PROJECT_CONTEXT_ENV = "PI_SUBAGENT_INHERIT_PROJECT_CONTEXT";
 const SUBAGENT_INHERIT_SKILLS_ENV = "PI_SUBAGENT_INHERIT_SKILLS";
@@ -24,11 +25,89 @@ const SUBAGENT_ORCHESTRATION_SKILL_NAME_PATTERN = /<name>\s*pi-subagents\s*<\/na
 const PROJECT_CONTEXT_HEADER = "\n\n# Project Context\n\nProject-specific instructions and guidelines:\n\n";
 const SKILLS_HEADER = "\n\nThe following skills provide specialized instructions for specific tasks.";
 const DATE_HEADER = "\nCurrent date:";
+const NONE_SENTINEL = "__none__";
 
 function readBooleanEnv(name: string): boolean | undefined {
 	const value = process.env[name];
 	if (value === undefined) return undefined;
 	return value !== "0";
+}
+
+function parseCsvEnv(name: string): string[] {
+	const raw = process.env[name];
+	if (!raw || raw === NONE_SENTINEL) return [];
+	return raw
+		.split(",")
+		.map((item) => item.trim())
+		.filter(Boolean);
+}
+
+function normalizeToolName(value: string): string {
+	return value.trim().replace(/-/g, "_");
+}
+
+function addDenyCandidate(candidates: Set<string>, value: string): void {
+	const trimmed = value.trim();
+	if (!trimmed) return;
+	candidates.add(trimmed);
+	candidates.add(normalizeToolName(trimmed));
+}
+
+function buildDenyMatcher(denyTools: string[]): (toolName: string) => boolean {
+	const exact = new Set<string>();
+	const prefixes = new Set<string>();
+
+	for (const raw of denyTools) {
+		const item = raw.trim();
+		if (!item) continue;
+		addDenyCandidate(exact, item);
+
+		const mcpSpec = item.startsWith("mcp:") ? item.slice(4).trim() : item;
+		if (mcpSpec !== item) addDenyCandidate(exact, mcpSpec);
+
+		if (mcpSpec.includes("/")) {
+			const [server, tool] = mcpSpec.split("/", 2);
+			if (server && tool) {
+				addDenyCandidate(exact, `${server}_${tool}`);
+				const shortServer = server.replace(/-?mcp$/i, "");
+				if (shortServer && shortServer !== server) addDenyCandidate(exact, `${shortServer}_${tool}`);
+				addDenyCandidate(exact, tool);
+			}
+		} else if (item.startsWith("mcp:")) {
+			const serverPrefix = normalizeToolName(mcpSpec);
+			if (serverPrefix) {
+				prefixes.add(`${serverPrefix}_`);
+				const shortPrefix = normalizeToolName(mcpSpec.replace(/-?mcp$/i, ""));
+				if (shortPrefix && shortPrefix !== serverPrefix) prefixes.add(`${shortPrefix}_`);
+			}
+		}
+	}
+
+	return (toolName: string) => {
+		const normalized = normalizeToolName(toolName);
+		if (exact.has(toolName) || exact.has(normalized)) return true;
+		for (const prefix of prefixes) {
+			if (normalized.startsWith(prefix)) return true;
+		}
+		return false;
+	};
+}
+
+export function filterDeniedTools(activeTools: string[], denyTools: string[]): string[] {
+	if (denyTools.length === 0 || activeTools.length === 0) return activeTools;
+	const isDenied = buildDenyMatcher(denyTools);
+	return activeTools.filter((tool) => !isDenied(tool));
+}
+
+function applyDeniedTools(pi: ExtensionAPI): boolean {
+	const denyTools = parseCsvEnv(SUBAGENT_DENY_TOOLS_ENV);
+	if (denyTools.length === 0) return false;
+	if (typeof pi.getActiveTools !== "function" || typeof pi.setActiveTools !== "function") return false;
+	const activeTools = pi.getActiveTools();
+	const filtered = filterDeniedTools(activeTools, denyTools);
+	if (filtered.length === activeTools.length && filtered.every((tool, index) => tool === activeTools[index])) return false;
+	pi.setActiveTools(filtered);
+	return true;
 }
 
 function findSectionEnd(prompt: string, startIndex: number, nextHeaders: string[]): number {
@@ -125,6 +204,10 @@ export function stripParentOnlySubagentMessages(messages: unknown[]): unknown[] 
 }
 
 export default function registerSubagentPromptRuntime(pi: ExtensionAPI): void {
+	pi.on("session_start", () => {
+		applyDeniedTools(pi);
+	});
+
 	pi.on("context", (event) => {
 		const messages = stripParentOnlySubagentMessages(event.messages);
 		if (messages === event.messages) return undefined;

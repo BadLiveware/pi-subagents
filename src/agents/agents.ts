@@ -45,6 +45,7 @@ export interface BuiltinAgentOverrideBase {
 	skills?: string[];
 	tools?: string[];
 	mcpDirectTools?: string[];
+	denyTools?: string[];
 }
 
 interface BuiltinAgentOverrideConfig {
@@ -59,6 +60,7 @@ interface BuiltinAgentOverrideConfig {
 	systemPrompt?: string;
 	skills?: string[] | false;
 	tools?: string[] | false;
+	denyTools?: string[] | false;
 }
 
 interface BuiltinAgentOverrideInfo {
@@ -74,6 +76,7 @@ export interface AgentConfig {
 	description: string;
 	tools?: string[];
 	mcpDirectTools?: string[];
+	denyTools?: string[];
 	model?: string;
 	fallbackModels?: string[];
 	thinking?: string;
@@ -182,6 +185,7 @@ function cloneOverrideBase(agent: AgentConfig): BuiltinAgentOverrideBase {
 		skills: agent.skills ? [...agent.skills] : undefined,
 		tools: agent.tools ? [...agent.tools] : undefined,
 		mcpDirectTools: agent.mcpDirectTools ? [...agent.mcpDirectTools] : undefined,
+		denyTools: agent.denyTools ? [...agent.denyTools] : undefined,
 	};
 }
 
@@ -200,6 +204,7 @@ function cloneOverrideValue(override: BuiltinAgentOverrideConfig): BuiltinAgentO
 		...(override.systemPrompt !== undefined ? { systemPrompt: override.systemPrompt } : {}),
 		...(override.skills !== undefined ? { skills: override.skills === false ? false : [...override.skills] } : {}),
 		...(override.tools !== undefined ? { tools: override.tools === false ? false : [...override.tools] } : {}),
+		...(override.denyTools !== undefined ? { denyTools: override.denyTools === false ? false : [...override.denyTools] } : {}),
 	};
 }
 
@@ -350,6 +355,9 @@ function parseBuiltinOverrideEntry(
 	const tools = parseOverrideStringArrayOrFalse(input.tools, { filePath, name, field: "tools" });
 	if (tools !== undefined) override.tools = tools;
 
+	const denyTools = parseOverrideStringArrayOrFalse(input.denyTools, { filePath, name, field: "denyTools" });
+	if (denyTools !== undefined) override.denyTools = denyTools;
+
 	return Object.keys(override).length > 0 ? override : undefined;
 }
 
@@ -408,6 +416,7 @@ function applyBuiltinOverride(
 		next.tools = tools;
 		next.mcpDirectTools = mcpDirectTools;
 	}
+	if (override.denyTools !== undefined) next.denyTools = override.denyTools === false ? undefined : [...override.denyTools];
 
 	return next;
 }
@@ -447,7 +456,7 @@ function applyBuiltinOverrides(
 
 export function buildBuiltinOverrideConfig(
 	base: BuiltinAgentOverrideBase,
-	draft: Pick<AgentConfig, "model" | "fallbackModels" | "thinking" | "systemPromptMode" | "inheritProjectContext" | "inheritSkills" | "defaultContext" | "disabled" | "systemPrompt" | "skills" | "tools" | "mcpDirectTools">,
+	draft: Pick<AgentConfig, "model" | "fallbackModels" | "thinking" | "systemPromptMode" | "inheritProjectContext" | "inheritSkills" | "defaultContext" | "disabled" | "systemPrompt" | "skills" | "tools" | "mcpDirectTools" | "denyTools">,
 ): BuiltinAgentOverrideConfig | undefined {
 	const override: BuiltinAgentOverrideConfig = {};
 
@@ -465,6 +474,7 @@ export function buildBuiltinOverrideConfig(
 	const baseTools = joinToolList(base);
 	const draftTools = joinToolList(draft);
 	if (!arraysEqual(draftTools, baseTools)) override.tools = draftTools ? [...draftTools] : false;
+	if (!arraysEqual(draft.denyTools, base.denyTools)) override.denyTools = draft.denyTools ? [...draft.denyTools] : false;
 
 	return Object.keys(override).length > 0 ? override : undefined;
 }
@@ -581,6 +591,11 @@ function loadAgentsFromDir(dir: string, source: AgentSource): AgentConfig[] {
 			}
 		}
 
+		const denyTools = frontmatter.denyTools
+			?.split(",")
+			.map((tool) => tool.trim())
+			.filter(Boolean);
+
 		const defaultReads = frontmatter.defaultReads
 			?.split(",")
 			.map((f) => f.trim())
@@ -638,6 +653,7 @@ function loadAgentsFromDir(dir: string, source: AgentSource): AgentConfig[] {
 			description: frontmatter.description,
 			tools: tools.length > 0 ? tools : undefined,
 			mcpDirectTools: mcpDirectTools.length > 0 ? mcpDirectTools : undefined,
+			denyTools: denyTools && denyTools.length > 0 ? denyTools : undefined,
 			model: frontmatter.model,
 			fallbackModels: fallbackModels && fallbackModels.length > 0 ? fallbackModels : undefined,
 			thinking: frontmatter.thinking,

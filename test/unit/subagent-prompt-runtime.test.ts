@@ -3,17 +3,20 @@ import { afterEach, describe, it } from "node:test";
 import registerSubagentPromptRuntime, {
 	CHILD_SUBAGENT_BOUNDARY_INSTRUCTIONS,
 	SUBAGENT_INTERCOM_SESSION_NAME_ENV,
+	filterDeniedTools,
 	rewriteSubagentPrompt,
 	stripInheritedSkills,
 	stripParentOnlySubagentMessages,
 	stripProjectContext,
 	stripSubagentOrchestrationSkill,
 } from "../../src/runs/shared/subagent-prompt-runtime.ts";
+import { SUBAGENT_DENY_TOOLS_ENV } from "../../src/runs/shared/pi-args.ts";
 
 const envSnapshot = {
 	PI_SUBAGENT_INHERIT_PROJECT_CONTEXT: process.env.PI_SUBAGENT_INHERIT_PROJECT_CONTEXT,
 	PI_SUBAGENT_INHERIT_SKILLS: process.env.PI_SUBAGENT_INHERIT_SKILLS,
 	PI_SUBAGENT_INTERCOM_SESSION_NAME: process.env.PI_SUBAGENT_INTERCOM_SESSION_NAME,
+	PI_SUBAGENT_DENY_TOOLS: process.env.PI_SUBAGENT_DENY_TOOLS,
 };
 
 const SKILLS_SECTION = "\n\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>safe-bash</name>\n    <description>desc</description>\n    <location>/tmp/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>pi-subagents</name>\n    <description>delegate to subagents</description>\n    <location>/tmp/pi-subagents/SKILL.md</location>\n  </skill>\n</available_skills>";
@@ -40,9 +43,43 @@ afterEach(() => {
 	else process.env.PI_SUBAGENT_INHERIT_SKILLS = envSnapshot.PI_SUBAGENT_INHERIT_SKILLS;
 	if (envSnapshot.PI_SUBAGENT_INTERCOM_SESSION_NAME === undefined) delete process.env.PI_SUBAGENT_INTERCOM_SESSION_NAME;
 	else process.env.PI_SUBAGENT_INTERCOM_SESSION_NAME = envSnapshot.PI_SUBAGENT_INTERCOM_SESSION_NAME;
+	if (envSnapshot.PI_SUBAGENT_DENY_TOOLS === undefined) delete process.env.PI_SUBAGENT_DENY_TOOLS;
+	else process.env.PI_SUBAGENT_DENY_TOOLS = envSnapshot.PI_SUBAGENT_DENY_TOOLS;
 });
 
 describe("subagent prompt runtime", () => {
+	it("filters denied builtin and MCP direct tools", () => {
+		assert.deepEqual(
+			filterDeniedTools(
+				["read", "bash", "subagent", "github_create_pull_request", "chrome_devtools_list_pages"],
+				["subagent", "mcp:github/create_pull_request", "mcp:chrome-devtools"],
+			),
+			["read", "bash"],
+		);
+	});
+
+	it("applies denied tools during session startup", () => {
+		let sessionStart: (() => void) | undefined;
+		let activeTools = ["read", "bash", "subagent", "github_create_pull_request"];
+		process.env[SUBAGENT_DENY_TOOLS_ENV] = "subagent,mcp:github/create_pull_request";
+
+		registerSubagentPromptRuntime({
+			on(event: string, handler: () => void) {
+				if (event === "session_start") sessionStart = handler;
+			},
+			getActiveTools() {
+				return activeTools;
+			},
+			setActiveTools(toolNames: string[]) {
+				activeTools = toolNames;
+			},
+		} as { on(event: string, handler: () => void): void; getActiveTools(): string[]; setActiveTools(toolNames: string[]): void });
+
+		sessionStart?.();
+
+		assert.deepEqual(activeTools, ["read", "bash"]);
+	});
+
 	it("strips only the project context block", () => {
 		const rewritten = stripProjectContext(BASE_PROMPT);
 		assert.ok(!rewritten.includes("# Project Context"));

@@ -242,6 +242,11 @@ function applyAgentConfig(target: AgentConfig, cfg: Record<string, unknown>): st
 		else if (typeof cfg.tools === "string") { const parsed = parseTools(cfg.tools); target.tools = parsed.tools; target.mcpDirectTools = parsed.mcpDirectTools; }
 		else return "config.tools must be a comma-separated string or false when provided.";
 	}
+	if (hasKey(cfg, "denyTools")) {
+		if (cfg.denyTools === false || cfg.denyTools === "") target.denyTools = undefined;
+		else if (typeof cfg.denyTools === "string") { const denyTools = parseCsv(cfg.denyTools); target.denyTools = denyTools.length ? denyTools : undefined; }
+		else return "config.denyTools must be a comma-separated string or false when provided.";
+	}
 	if (hasKey(cfg, "skills")) {
 		if (cfg.skills === false || cfg.skills === "") target.skills = undefined;
 		else if (typeof cfg.skills === "string") { const skills = parseCsv(cfg.skills); target.skills = skills.length ? skills : undefined; }
@@ -354,6 +359,7 @@ function formatAgentDetail(agent: AgentConfig): string {
 	if (agent.model) lines.push(`Model: ${agent.model}`);
 	if (agent.fallbackModels?.length) lines.push(`Fallback models: ${agent.fallbackModels.join(", ")}`);
 	if (tools.length) lines.push(`Tools: ${tools.join(", ")}`);
+	if (agent.denyTools?.length) lines.push(`Denied tools: ${agent.denyTools.join(", ")}`);
 	if (agent.skills?.length) lines.push(`Skills: ${agent.skills.join(", ")}`);
 	lines.push(`System prompt mode: ${agent.systemPromptMode}`);
 	lines.push(`Inherit project context: ${agent.inheritProjectContext ? "true" : "false"}`);

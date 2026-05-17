@@ -59,6 +59,7 @@ describe("builtin agent overrides", () => {
 						systemPromptMode: "replace",
 						inheritProjectContext: true,
 						inheritSkills: true,
+						denyTools: ["subagent", "mcp:github/create_pull_request"],
 					},
 				},
 			},
@@ -72,6 +73,7 @@ describe("builtin agent overrides", () => {
 		assert.equal(reviewer.systemPromptMode, "replace");
 		assert.equal(reviewer.inheritProjectContext, true);
 		assert.equal(reviewer.inheritSkills, true);
+		assert.deepEqual(reviewer.denyTools, ["subagent", "mcp:github/create_pull_request"]);
 		assert.equal(reviewer.override?.scope, "user");
 		assert.equal(reviewer.override?.path, path.join(tempHome, ".pi", "agent", "settings.json"));
 	});
@@ -215,6 +217,7 @@ describe("builtin agent overrides", () => {
 				skills: ["safe-bash"],
 				tools: ["bash"],
 				mcpDirectTools: ["xcodebuild_list_sims"],
+				denyTools: ["subagent"],
 			},
 			{
 				model: undefined,
@@ -228,6 +231,7 @@ describe("builtin agent overrides", () => {
 				skills: undefined,
 				tools: undefined,
 				mcpDirectTools: undefined,
+				denyTools: undefined,
 			},
 		);
 
@@ -240,6 +244,7 @@ describe("builtin agent overrides", () => {
 			defaultContext: false,
 			skills: false,
 			tools: false,
+			denyTools: false,
 		});
 	});
 });

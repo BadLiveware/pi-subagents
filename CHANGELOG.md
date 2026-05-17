@@ -12,6 +12,7 @@
 ## [Unreleased]
 
 ### Added
+- Added `denyTools` agent configuration to inherit a child Pi session's normal tool set while removing specific builtin or direct MCP tools, with support in frontmatter, management config, builtin overrides, foreground runs, and async runs.
 
 ### Fixed
 

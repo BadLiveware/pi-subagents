@@ -8,6 +8,7 @@ export interface RunnerSubagentStep {
 	tools?: string[];
 	extensions?: string[];
 	mcpDirectTools?: string[];
+	denyTools?: string[];
 	systemPrompt?: string | null;
 	systemPromptMode?: "append" | "replace";
 	inheritProjectContext: boolean;

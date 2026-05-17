@@ -175,8 +175,8 @@ Direct settings example:
 
 Useful override fields: `model`, `fallbackModels`, `thinking`,
 `systemPromptMode`, `inheritProjectContext`, `inheritSkills`, `defaultContext`,
-`disabled`, `skills`, `tools`, and `systemPrompt`. Create a user or project
-agent with the same name only when you want a substantially different agent.
+`disabled`, `skills`, `tools`, `denyTools`, and `systemPrompt`. Create a user or
+project agent with the same name only when you want a substantially different agent.
 
 ## Discovery and Scope Rules
 

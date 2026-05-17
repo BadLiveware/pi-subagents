@@ -8,6 +8,7 @@ const TASK_ARG_LIMIT = 8000;
 const PROMPT_RUNTIME_EXTENSION_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "subagent-prompt-runtime.ts");
 export const SUBAGENT_CHILD_ENV = "PI_SUBAGENT_CHILD";
 export const SUBAGENT_ORCHESTRATOR_TARGET_ENV = "PI_SUBAGENT_ORCHESTRATOR_TARGET";
+export const SUBAGENT_DENY_TOOLS_ENV = "PI_SUBAGENT_DENY_TOOLS";
 export const SUBAGENT_RUN_ID_ENV = "PI_SUBAGENT_RUN_ID";
 export const SUBAGENT_CHILD_AGENT_ENV = "PI_SUBAGENT_CHILD_AGENT";
 export const SUBAGENT_CHILD_INDEX_ENV = "PI_SUBAGENT_CHILD_INDEX";
@@ -27,6 +28,7 @@ interface BuildPiArgsInput {
 	extensions?: string[];
 	systemPrompt?: string | null;
 	mcpDirectTools?: string[];
+	denyTools?: string[];
 	promptFileStem?: string;
 	intercomSessionName?: string;
 	orchestratorIntercomTarget?: string;
@@ -70,6 +72,7 @@ export function buildPiArgs(input: BuildPiArgsInput): BuildPiArgsResult {
 	}
 
 	const toolExtensionPaths: string[] = [];
+	let hasBuiltinToolAllowlist = false;
 	if (input.tools?.length) {
 		const builtinTools: string[] = [];
 		for (const tool of input.tools) {
@@ -80,6 +83,7 @@ export function buildPiArgs(input: BuildPiArgsInput): BuildPiArgsResult {
 			}
 		}
 		if (builtinTools.length > 0) {
+			hasBuiltinToolAllowlist = true;
 			args.push("--tools", builtinTools.join(","));
 		}
 	}
@@ -141,8 +145,15 @@ export function buildPiArgs(input: BuildPiArgsInput): BuildPiArgsResult {
 	}
 	if (input.mcpDirectTools?.length) {
 		env.MCP_DIRECT_TOOLS = input.mcpDirectTools.join(",");
+	} else if (input.denyTools?.length && !hasBuiltinToolAllowlist) {
+		env.MCP_DIRECT_TOOLS = undefined;
 	} else {
 		env.MCP_DIRECT_TOOLS = "__none__";
+	}
+	if (input.denyTools?.length) {
+		env[SUBAGENT_DENY_TOOLS_ENV] = input.denyTools.join(",");
+	} else {
+		env[SUBAGENT_DENY_TOOLS_ENV] = "__none__";
 	}
 
 	return { args, env, tempDir };

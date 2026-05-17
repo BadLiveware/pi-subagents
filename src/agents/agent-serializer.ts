@@ -6,6 +6,7 @@ export const KNOWN_FIELDS = new Set([
 	"package",
 	"description",
 	"tools",
+	"denyTools",
 	"model",
 	"fallbackModels",
 	"thinking",
@@ -41,6 +42,8 @@ export function serializeAgent(config: AgentConfig): string {
 	];
 	const toolsValue = joinComma(tools);
 	if (toolsValue) lines.push(`tools: ${toolsValue}`);
+	const denyToolsValue = joinComma(config.denyTools);
+	if (denyToolsValue) lines.push(`denyTools: ${denyToolsValue}`);
 
 	if (config.model) lines.push(`model: ${config.model}`);
 	const fallbackModelsValue = joinComma(config.fallbackModels);
