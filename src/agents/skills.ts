@@ -3,6 +3,7 @@
  */
 
 import { execSync } from "node:child_process";
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -23,6 +24,14 @@ interface ResolvedSkill {
 	path: string;
 	content: string;
 	source: SkillSource;
+}
+
+export interface ResolvedSkillReference {
+	name: string;
+	path: string;
+	resourcePath: string;
+	source: SkillSource;
+	description?: string;
 }
 
 interface SkillCacheEntry {
@@ -371,22 +380,27 @@ function chooseHigherPrioritySkill(existing: CachedSkillEntry | undefined, candi
 	return candidate.order < existing.order ? candidate : existing;
 }
 
-function maybeReadSkillDescription(filePath: string): string | undefined {
+function readSkillMetadata(filePath: string): { name?: string; description?: string } {
 	try {
 		const content = fs.readFileSync(filePath, "utf-8");
 		const normalized = content.replace(/\r\n/g, "\n");
-		if (!normalized.startsWith("---")) return undefined;
+		if (!normalized.startsWith("---")) return {};
 
 		const endIndex = normalized.indexOf("\n---", 3);
-		if (endIndex === -1) return undefined;
+		if (endIndex === -1) return {};
 
 		const frontmatter = normalized.slice(3, endIndex).trim();
-		const match = frontmatter.match(/^description:\s*(.+)$/m);
-		if (!match) return undefined;
-		return match[1]?.trim().replace(/^['\"]|['\"]$/g, "");
+		const readField = (field: string): string | undefined => {
+			const match = frontmatter.match(new RegExp(`^${field}:\\s*(.+)$`, "m"));
+			return match?.[1]?.trim().replace(/^['\"]|['\"]$/g, "");
+		};
+		return {
+			name: readField("name"),
+			description: readField("description"),
+		};
 	} catch {
-		// Description parsing is best-effort metadata extraction.
-		return undefined;
+		// Metadata parsing is best-effort so unreadable files are simply undiscoverable.
+		return {};
 	}
 }
 
@@ -395,16 +409,17 @@ function collectFilesystemSkills(cwd: string, skillPaths: SkillSearchPath[]): Ca
 	const seen = new Set<string>();
 	let order = 0;
 
-	const pushEntry = (name: string, filePath: string, sourceHint?: SkillSource) => {
+	const pushEntry = (fallbackName: string, filePath: string, sourceHint?: SkillSource) => {
 		const resolvedFile = path.resolve(filePath);
 		if (seen.has(resolvedFile)) return;
 		if (!fs.existsSync(resolvedFile)) return;
+		const metadata = readSkillMetadata(resolvedFile);
 		seen.add(resolvedFile);
 		entries.push({
-			name,
+			name: metadata.name || fallbackName,
 			filePath: resolvedFile,
 			source: inferSkillSource(resolvedFile, cwd, sourceHint),
-			description: maybeReadSkillDescription(resolvedFile),
+			description: metadata.description,
 			order: order++,
 		});
 	};
@@ -485,11 +500,52 @@ function getCachedSkills(cwd: string): CachedSkillEntry[] {
 export function resolveSkillPath(
 	skillName: string,
 	cwd: string,
-): { path: string; source: SkillSource } | undefined {
+): { path: string; source: SkillSource; description?: string } | undefined {
 	const skills = getCachedSkills(cwd);
 	const skill = skills.find((s) => s.name === skillName);
 	if (!skill) return undefined;
-	return { path: skill.filePath, source: skill.source };
+	return { path: skill.filePath, source: skill.source, description: skill.description };
+}
+
+function slug(value: string): string {
+	return value.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "skill";
+}
+
+function shortHash(value: string): string {
+	return crypto.createHash("sha256").update(value).digest("hex").slice(0, 10);
+}
+
+function skillWrapperRoot(): string {
+	return path.join(os.tmpdir(), "pi-subagents", "skill-wrappers");
+}
+
+function writeSkillWrapper(skillName: string, originalSkillFile: string): string {
+	const wrapperDir = path.join(skillWrapperRoot(), shortHash(`${skillName}\0${originalSkillFile}`), slug(skillName));
+	fs.mkdirSync(wrapperDir, { recursive: true });
+	fs.writeFileSync(path.join(wrapperDir, "SKILL.md"), `---
+name: ${skillName}
+description: Loads the ${skillName} skill for a child subagent. Use when this selected skill is relevant.
+---
+
+# ${skillName}
+
+This is a generated wrapper for a skill selected by pi-subagents.
+
+Before proceeding, use the read tool to load the original skill file, then follow its instructions.
+
+Original skill: ${originalSkillFile}
+`);
+	return wrapperDir;
+}
+
+function resolveSkillResourcePath(skillName: string, skillPath: string): string {
+	const metadata = readSkillMetadata(skillPath);
+	const baseName = path.basename(skillPath);
+	const normalName = metadata.name || (baseName === "SKILL.md" ? path.basename(path.dirname(skillPath)) : path.basename(skillPath, path.extname(skillPath)));
+	if (metadata.description && normalName === skillName && (metadata.name || baseName === "SKILL.md")) {
+		return skillPath;
+	}
+	return writeSkillWrapper(skillName, skillPath);
 }
 
 function readSkill(
@@ -526,11 +582,11 @@ function readSkill(
 	}
 }
 
-export function resolveSkills(
+export function resolveSkillReferences(
 	skillNames: string[],
 	cwd: string,
-): { resolved: ResolvedSkill[]; missing: string[] } {
-	const resolved: ResolvedSkill[] = [];
+): { resolved: ResolvedSkillReference[]; missing: string[] } {
+	const resolved: ResolvedSkillReference[] = [];
 	const missing: string[] = [];
 
 	for (const name of skillNames) {
@@ -547,11 +603,48 @@ export function resolveSkills(
 			continue;
 		}
 
-		const skill = readSkill(trimmed, location.path, location.source);
+		resolved.push({
+			name: trimmed,
+			path: location.path,
+			resourcePath: resolveSkillResourcePath(trimmed, location.path),
+			source: location.source,
+			description: location.description,
+		});
+	}
+
+	return { resolved, missing };
+}
+
+export function resolveSkillReferencesWithFallback(
+	skillNames: string[],
+	primaryCwd: string,
+	fallbackCwd?: string,
+): { resolved: ResolvedSkillReference[]; missing: string[] } {
+	const primary = resolveSkillReferences(skillNames, primaryCwd);
+	if (!fallbackCwd || primary.missing.length === 0) return primary;
+	if (path.resolve(primaryCwd) === path.resolve(fallbackCwd)) return primary;
+
+	const fallback = resolveSkillReferences(primary.missing, fallbackCwd);
+	return {
+		resolved: [...primary.resolved, ...fallback.resolved],
+		missing: fallback.missing,
+	};
+}
+
+export function resolveSkills(
+	skillNames: string[],
+	cwd: string,
+): { resolved: ResolvedSkill[]; missing: string[] } {
+	const references = resolveSkillReferences(skillNames, cwd);
+	const resolved: ResolvedSkill[] = [];
+	const missing = [...references.missing];
+
+	for (const reference of references.resolved) {
+		const skill = readSkill(reference.name, reference.path, reference.source);
 		if (skill) {
 			resolved.push(skill);
 		} else {
-			missing.push(trimmed);
+			missing.push(reference.name);
 		}
 	}
 

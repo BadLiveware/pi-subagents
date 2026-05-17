@@ -10,13 +10,14 @@ import registerSubagentPromptRuntime, {
 	stripProjectContext,
 	stripSubagentOrchestrationSkill,
 } from "../../src/runs/shared/subagent-prompt-runtime.ts";
-import { SUBAGENT_DENY_TOOLS_ENV } from "../../src/runs/shared/pi-args.ts";
+import { SUBAGENT_DENY_TOOLS_ENV, SUBAGENT_SKILL_PATHS_ENV } from "../../src/runs/shared/pi-args.ts";
 
 const envSnapshot = {
 	PI_SUBAGENT_INHERIT_PROJECT_CONTEXT: process.env.PI_SUBAGENT_INHERIT_PROJECT_CONTEXT,
 	PI_SUBAGENT_INHERIT_SKILLS: process.env.PI_SUBAGENT_INHERIT_SKILLS,
 	PI_SUBAGENT_INTERCOM_SESSION_NAME: process.env.PI_SUBAGENT_INTERCOM_SESSION_NAME,
 	PI_SUBAGENT_DENY_TOOLS: process.env.PI_SUBAGENT_DENY_TOOLS,
+	PI_SUBAGENT_SKILL_PATHS: process.env.PI_SUBAGENT_SKILL_PATHS,
 };
 
 const SKILLS_SECTION = "\n\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>safe-bash</name>\n    <description>desc</description>\n    <location>/tmp/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>pi-subagents</name>\n    <description>delegate to subagents</description>\n    <location>/tmp/pi-subagents/SKILL.md</location>\n  </skill>\n</available_skills>";
@@ -45,6 +46,8 @@ afterEach(() => {
 	else process.env.PI_SUBAGENT_INTERCOM_SESSION_NAME = envSnapshot.PI_SUBAGENT_INTERCOM_SESSION_NAME;
 	if (envSnapshot.PI_SUBAGENT_DENY_TOOLS === undefined) delete process.env.PI_SUBAGENT_DENY_TOOLS;
 	else process.env.PI_SUBAGENT_DENY_TOOLS = envSnapshot.PI_SUBAGENT_DENY_TOOLS;
+	if (envSnapshot.PI_SUBAGENT_SKILL_PATHS === undefined) delete process.env.PI_SUBAGENT_SKILL_PATHS;
+	else process.env.PI_SUBAGENT_SKILL_PATHS = envSnapshot.PI_SUBAGENT_SKILL_PATHS;
 });
 
 describe("subagent prompt runtime", () => {
@@ -78,6 +81,21 @@ describe("subagent prompt runtime", () => {
 		sessionStart?.();
 
 		assert.deepEqual(activeTools, ["read", "bash"]);
+	});
+
+	it("contributes explicit subagent skill paths through resource discovery", () => {
+		let resourcesDiscover: (() => { skillPaths: string[] } | undefined) | undefined;
+		process.env[SUBAGENT_SKILL_PATHS_ENV] = JSON.stringify(["/repo/.pi/skills/review/SKILL.md", "/tmp/custom-skill.md"]);
+
+		registerSubagentPromptRuntime({
+			on(event: string, handler: () => { skillPaths: string[] } | undefined) {
+				if (event === "resources_discover") resourcesDiscover = handler;
+			},
+		} as { on(event: string, handler: () => { skillPaths: string[] } | undefined): void });
+
+		assert.deepEqual(resourcesDiscover?.(), {
+			skillPaths: ["/repo/.pi/skills/review/SKILL.md", "/tmp/custom-skill.md"],
+		});
 	});
 
 	it("strips only the project context block", () => {

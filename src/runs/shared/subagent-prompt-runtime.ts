@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { SUBAGENT_DENY_TOOLS_ENV } from "./pi-args.ts";
+import { SUBAGENT_DENY_TOOLS_ENV, SUBAGENT_SKILL_PATHS_ENV } from "./pi-args.ts";
 
 const SUBAGENT_INHERIT_PROJECT_CONTEXT_ENV = "PI_SUBAGENT_INHERIT_PROJECT_CONTEXT";
 const SUBAGENT_INHERIT_SKILLS_ENV = "PI_SUBAGENT_INHERIT_SKILLS";
@@ -40,6 +40,20 @@ function parseCsvEnv(name: string): string[] {
 		.split(",")
 		.map((item) => item.trim())
 		.filter(Boolean);
+}
+
+function parseJsonStringArrayEnv(name: string): string[] {
+	const raw = process.env[name];
+	if (!raw || raw === NONE_SENTINEL) return [];
+	try {
+		const parsed = JSON.parse(raw);
+		if (!Array.isArray(parsed)) return [];
+		return parsed
+			.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+			.map((item) => item.trim());
+	} catch {
+		return [];
+	}
 }
 
 function normalizeToolName(value: string): string {
@@ -204,6 +218,11 @@ export function stripParentOnlySubagentMessages(messages: unknown[]): unknown[] 
 }
 
 export default function registerSubagentPromptRuntime(pi: ExtensionAPI): void {
+	pi.on("resources_discover", () => {
+		const skillPaths = parseJsonStringArrayEnv(SUBAGENT_SKILL_PATHS_ENV);
+		return skillPaths.length > 0 ? { skillPaths } : undefined;
+	});
+
 	pi.on("session_start", () => {
 		applyDeniedTools(pi);
 	});

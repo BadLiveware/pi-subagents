@@ -296,7 +296,7 @@ Append `[key=value,...]` to an agent name to override defaults for that step:
 | `outputMode` | `outputMode=file-only` | Return only a concise file reference for saved output instead of the full saved content. Requires `output`; default is `inline`. |
 | `reads` | `reads=a.md+b.md` | Read files before executing. `+` separates multiple paths. |
 | `model` | `model=anthropic/claude-sonnet-4` | Override model for this step. |
-| `skills` | `skills=planning+review` | Override injected skills. `+` separates multiple skills. |
+| `skills` | `skills=planning+review` | Override explicit skills. `+` separates multiple skills. |
 | `progress` | `progress` | Enable progress tracking. |
 
 Set `output=false`, `reads=false`, or `skills=false` to disable that behavior explicitly. Do not use `output=false` for file-only returns; use `outputMode=file-only` with an `output` path.
@@ -455,7 +455,7 @@ Important fields:
 | `inheritProjectContext` | Keeps or strips inherited project instruction blocks. |
 | `inheritSkills` | Keeps or strips Pi’s discovered skills catalog. |
 | `defaultContext` | Optional `fresh` or `fork` launch context default for this agent. |
-| `skills` | Injects specific skills directly, regardless of `inheritSkills`. |
+| `skills` | Loads specific skills through Pi's normal skill catalog, regardless of `inheritSkills`. |
 | `output` | Default single-agent output file. |
 | `defaultReads` | Files to read before running in chain/parallel behavior. |
 | `defaultProgress` | Maintain `progress.md`. |
@@ -556,7 +556,7 @@ Parallel outputs are aggregated with clear separators before being passed to the
 
 ## Skills
 
-Skills are `SKILL.md` files injected into an agent’s system prompt.
+Skills are `SKILL.md` files loaded into the child session through Pi’s normal progressive-disclosure skill catalog. The child prompt sees the skill name, description, and file path; the full `SKILL.md` body is loaded on demand with `read`, just like ordinary Pi skill discovery.
 
 Discovery uses project-first precedence:
 
@@ -578,13 +578,7 @@ Use agent defaults, override them at runtime, or disable them:
 
 For chains, `skill` at the top level is additive. A step-level `skill` overrides that step; `false` disables skills for that step.
 
-Injected skills use this shape:
-
-```xml
-<skill name="safe-bash">
-[skill content from SKILL.md, frontmatter stripped]
-</skill>
-```
+Explicit skills are passed to the child runtime as skill paths, not appended as full prompt text. This keeps large skill bodies out of the startup prompt while still registering native `/skill:name` commands and normal `<available_skills>` entries.
 
 Missing skills do not fail execution. The result summary shows a warning.
 

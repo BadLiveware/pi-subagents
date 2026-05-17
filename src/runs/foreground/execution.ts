@@ -40,7 +40,7 @@ import {
 	extractToolArgsPreview,
 	extractTextFromContent,
 } from "../../shared/utils.ts";
-import { buildSkillInjection, resolveSkillsWithFallback } from "../../agents/skills.ts";
+import { resolveSkillReferencesWithFallback } from "../../agents/skills.ts";
 import { evaluateCompletionMutationGuard } from "../shared/completion-guard.ts";
 import { getPiSpawnCommand } from "../shared/pi-spawn.ts";
 import { createJsonlWriter } from "../../shared/jsonl-writer.ts";
@@ -127,7 +127,7 @@ async function runSingleAttempt(
 	shared: {
 		sessionEnabled: boolean;
 		systemPrompt: string;
-		resolvedSkillNames?: string[];
+		resolvedSkills?: Array<{ name: string; path: string }>;
 		skillsWarning?: string;
 		jsonlPath?: string;
 		artifactPaths?: ArtifactPaths;
@@ -152,6 +152,7 @@ async function runSingleAttempt(
 		systemPrompt: shared.systemPrompt,
 		mcpDirectTools: agent.mcpDirectTools,
 		denyTools: agent.denyTools,
+		skillPaths: shared.resolvedSkills?.map((skill) => skill.path),
 		promptFileStem: agent.name,
 		intercomSessionName: options.intercomSessionName,
 		orchestratorIntercomTarget: options.orchestratorIntercomTarget,
@@ -168,7 +169,7 @@ async function runSingleAttempt(
 		usage: emptyUsage(),
 		model: modelArg,
 		artifactPaths: shared.artifactPaths,
-		skills: shared.resolvedSkillNames,
+		skills: shared.resolvedSkills?.map((skill) => skill.name),
 		skillsWarning: shared.skillsWarning,
 	};
 	const startTime = Date.now();
@@ -190,7 +191,7 @@ async function runSingleAttempt(
 		agent: agent.name,
 		status: "running",
 		task,
-		skills: shared.resolvedSkillNames,
+		skills: shared.resolvedSkills?.map((skill) => skill.name),
 		recentTools: [],
 		recentOutput: [...shared.attemptNotes],
 		toolCount: 0,
@@ -752,7 +753,7 @@ export async function runSync(
 	const sessionEnabled = Boolean(options.sessionFile || options.sessionDir) || shareEnabled;
 	const skillNames = options.skills ?? agent.skills ?? [];
 	const skillCwd = options.cwd ?? runtimeCwd;
-	const { resolved: resolvedSkills, missing: missingSkills } = resolveSkillsWithFallback(skillNames, skillCwd, runtimeCwd);
+	const { resolved: resolvedSkills, missing: missingSkills } = resolveSkillReferencesWithFallback(skillNames, skillCwd, runtimeCwd);
 	if (skillNames.some((skill) => skill.trim() === "pi-subagents") && missingSkills.includes("pi-subagents")) {
 		return {
 			agent: agentName,
@@ -763,11 +764,7 @@ export async function runSync(
 			error: "Skills not found: pi-subagents",
 		};
 	}
-	let systemPrompt = agent.systemPrompt?.trim() || "";
-	if (resolvedSkills.length > 0) {
-		const skillInjection = buildSkillInjection(resolvedSkills);
-		systemPrompt = systemPrompt ? `${systemPrompt}\n\n${skillInjection}` : skillInjection;
-	}
+	const systemPrompt = agent.systemPrompt?.trim() || "";
 
 	const candidates = buildModelCandidates(
 		options.modelOverride ?? agent.model,
@@ -804,7 +801,7 @@ export async function runSync(
 		const result = await runSingleAttempt(runtimeCwd, agent, task, candidate, options, {
 			sessionEnabled,
 			systemPrompt,
-			resolvedSkillNames: resolvedSkills.length > 0 ? resolvedSkills.map((skill) => skill.name) : undefined,
+			resolvedSkills: resolvedSkills.length > 0 ? resolvedSkills.map((skill) => ({ name: skill.name, path: skill.resourcePath })) : undefined,
 			skillsWarning: missingSkills.length > 0 ? `Skills not found: ${missingSkills.join(", ")}` : undefined,
 			jsonlPath,
 			artifactPaths: artifactPathsResult,

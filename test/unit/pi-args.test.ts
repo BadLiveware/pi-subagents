@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { SUBAGENT_DENY_TOOLS_ENV, applyThinkingSuffix, buildPiArgs } from "../../src/runs/shared/pi-args.ts";
+import { SUBAGENT_DENY_TOOLS_ENV, SUBAGENT_SKILL_PATHS_ENV, applyThinkingSuffix, buildPiArgs } from "../../src/runs/shared/pi-args.ts";
 
 describe("buildPiArgs session wiring", () => {
 	it("uses --session when sessionFile is provided", () => {
@@ -140,6 +140,21 @@ describe("buildPiArgs system prompt mode wiring", () => {
 		assert.equal(env.PI_SUBAGENT_INHERIT_PROJECT_CONTEXT, "0");
 		assert.equal(env.PI_SUBAGENT_INHERIT_SKILLS, "1");
 		assert.equal(env[SUBAGENT_DENY_TOOLS_ENV], "__none__");
+		assert.equal(env[SUBAGENT_SKILL_PATHS_ENV], "__none__");
+	});
+
+	it("passes explicit skill paths through the runtime env", () => {
+		const { args, env } = buildPiArgs({
+			baseArgs: ["-p"],
+			task: "hello",
+			sessionEnabled: false,
+			inheritProjectContext: false,
+			inheritSkills: false,
+			skillPaths: ["/repo/.pi/skills/review/SKILL.md", "/tmp/custom-skill.md"],
+		});
+
+		assert.ok(args.includes("--no-skills"), "default skill discovery should remain disabled");
+		assert.equal(env[SUBAGENT_SKILL_PATHS_ENV], JSON.stringify(["/repo/.pi/skills/review/SKILL.md", "/tmp/custom-skill.md"]));
 	});
 
 	it("passes denied tools through env", () => {

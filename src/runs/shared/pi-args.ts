@@ -9,6 +9,7 @@ const PROMPT_RUNTIME_EXTENSION_PATH = path.join(path.dirname(fileURLToPath(impor
 export const SUBAGENT_CHILD_ENV = "PI_SUBAGENT_CHILD";
 export const SUBAGENT_ORCHESTRATOR_TARGET_ENV = "PI_SUBAGENT_ORCHESTRATOR_TARGET";
 export const SUBAGENT_DENY_TOOLS_ENV = "PI_SUBAGENT_DENY_TOOLS";
+export const SUBAGENT_SKILL_PATHS_ENV = "PI_SUBAGENT_SKILL_PATHS";
 export const SUBAGENT_RUN_ID_ENV = "PI_SUBAGENT_RUN_ID";
 export const SUBAGENT_CHILD_AGENT_ENV = "PI_SUBAGENT_CHILD_AGENT";
 export const SUBAGENT_CHILD_INDEX_ENV = "PI_SUBAGENT_CHILD_INDEX";
@@ -29,6 +30,7 @@ interface BuildPiArgsInput {
 	systemPrompt?: string | null;
 	mcpDirectTools?: string[];
 	denyTools?: string[];
+	skillPaths?: string[];
 	promptFileStem?: string;
 	intercomSessionName?: string;
 	orchestratorIntercomTarget?: string;
@@ -154,6 +156,11 @@ export function buildPiArgs(input: BuildPiArgsInput): BuildPiArgsResult {
 		env[SUBAGENT_DENY_TOOLS_ENV] = input.denyTools.join(",");
 	} else {
 		env[SUBAGENT_DENY_TOOLS_ENV] = "__none__";
+	}
+	if (input.skillPaths?.length) {
+		env[SUBAGENT_SKILL_PATHS_ENV] = JSON.stringify(input.skillPaths);
+	} else {
+		env[SUBAGENT_SKILL_PATHS_ENV] = "__none__";
 	}
 
 	return { args, env, tempDir };

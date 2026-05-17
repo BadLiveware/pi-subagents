@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
 	clearSkillCache,
 	discoverAvailableSkills,
+	resolveSkillReferences,
 	resolveSkills,
 	resolveSkillsWithFallback,
 } from "../../src/agents/skills.ts";
@@ -98,6 +99,19 @@ describe("skills filesystem fallback", () => {
 		const discovered = skills.find((skill) => skill.name === "pkg-skill");
 		assert.ok(discovered, "expected pkg-skill to be discovered");
 		assert.equal(discovered?.source, "project-package");
+	});
+
+	it("builds a normal-discovery wrapper for skills without frontmatter descriptions", () => {
+		makeProjectPackageSkill(tempDir, "test-skill-package", "pkg-skill", "Use package skill.");
+
+		const { resolved, missing } = resolveSkillReferences(["pkg-skill"], tempDir);
+		assert.deepEqual(missing, []);
+		assert.equal(resolved[0]?.path.endsWith(path.join("skills", "pkg-skill", "SKILL.md")), true);
+		assert.notEqual(resolved[0]?.resourcePath, resolved[0]?.path);
+		const wrapper = fs.readFileSync(path.join(resolved[0]!.resourcePath, "SKILL.md"), "utf-8");
+		assert.match(wrapper, /name: pkg-skill/);
+		assert.match(wrapper, /use the read tool to load the original skill file/i);
+		assert.match(wrapper, /Original skill: .*pkg-skill.*SKILL\.md/);
 	});
 
 	it("prefers project skills over project-package skills with the same name", () => {

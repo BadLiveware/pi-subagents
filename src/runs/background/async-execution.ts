@@ -15,7 +15,7 @@ import { injectSingleOutputInstruction, resolveSingleOutputPath, validateFileOnl
 import { buildChainInstructions, isParallelStep, resolveStepBehavior, suppressProgressForReadOnlyTask, writeInitialProgressFile, type ChainStep, type ResolvedStepBehavior, type SequentialStep, type StepOverrides } from "../../shared/settings.ts";
 import type { RunnerStep } from "../shared/parallel-utils.ts";
 import { resolvePiPackageRoot } from "../shared/pi-spawn.ts";
-import { buildSkillInjection, normalizeSkillInput, resolveSkillsWithFallback } from "../../agents/skills.ts";
+import { normalizeSkillInput, resolveSkillReferencesWithFallback } from "../../agents/skills.ts";
 import { resolveChildCwd } from "../../shared/utils.ts";
 import { buildModelCandidates, resolveModelCandidate, type AvailableModelInfo } from "../shared/model-fallback.ts";
 import { resolveEffectiveThinking } from "../../shared/model-info.ts";
@@ -291,14 +291,10 @@ export function executeAsyncChain(
 		const instructionCwd = behaviorCwd ?? stepCwd;
 		const behavior = suppressProgressForReadOnlyTask(resolvedBehavior ?? resolveStepBehavior(a, buildStepOverrides(s), chainSkills), s.task, originalTask);
 		const skillNames = behavior.skills === false ? [] : behavior.skills;
-		const { resolved: resolvedSkills, missing: missingSkills } = resolveSkillsWithFallback(skillNames, stepCwd, ctx.cwd);
+		const { resolved: resolvedSkills, missing: missingSkills } = resolveSkillReferencesWithFallback(skillNames, stepCwd, ctx.cwd);
 		if (missingSkills.includes("pi-subagents")) throw new UnavailableSubagentSkillError(UNAVAILABLE_SUBAGENT_SKILL_ERROR);
 
-		let systemPrompt = a.systemPrompt?.trim() ?? "";
-		if (resolvedSkills.length > 0) {
-			const injection = buildSkillInjection(resolvedSkills);
-			systemPrompt = systemPrompt ? `${systemPrompt}\n\n${injection}` : injection;
-		}
+		const systemPrompt = a.systemPrompt?.trim() ?? "";
 
 		const readInstructions = buildChainInstructions({ ...behavior, output: false, progress: false }, instructionCwd, false);
 		const isFirstProgressAgent = behavior.progress && !progressPrecreated && !progressInstructionCreated;
@@ -329,6 +325,7 @@ export function executeAsyncChain(
 			inheritProjectContext: a.inheritProjectContext,
 			inheritSkills: a.inheritSkills,
 			skills: resolvedSkills.map((r) => r.name),
+			skillPaths: resolvedSkills.map((r) => r.resourcePath),
 			outputPath,
 			outputMode: behavior.outputMode,
 			sessionFile,
@@ -504,13 +501,9 @@ export function executeAsyncSingle(
 	const runnerCwd = resolveChildCwd(ctx.cwd, cwd);
 	const skillNames = params.skills ?? agentConfig.skills ?? [];
 	const availableModels = params.availableModels;
-	const { resolved: resolvedSkills, missing: missingSkills } = resolveSkillsWithFallback(skillNames, runnerCwd, ctx.cwd);
+	const { resolved: resolvedSkills, missing: missingSkills } = resolveSkillReferencesWithFallback(skillNames, runnerCwd, ctx.cwd);
 	if (missingSkills.includes("pi-subagents")) return formatAsyncStartError("single", UNAVAILABLE_SUBAGENT_SKILL_ERROR);
-	let systemPrompt = agentConfig.systemPrompt?.trim() ?? "";
-	if (resolvedSkills.length > 0) {
-		const injection = buildSkillInjection(resolvedSkills);
-		systemPrompt = systemPrompt ? `${systemPrompt}\n\n${injection}` : injection;
-	}
+	const systemPrompt = agentConfig.systemPrompt?.trim() ?? "";
 
 	const asyncDir = path.join(ASYNC_DIR, id);
 	try {
@@ -557,6 +550,7 @@ export function executeAsyncSingle(
 						inheritProjectContext: agentConfig.inheritProjectContext,
 						inheritSkills: agentConfig.inheritSkills,
 						skills: resolvedSkills.map((r) => r.name),
+						skillPaths: resolvedSkills.map((r) => r.resourcePath),
 						outputPath,
 						outputMode,
 						sessionFile,

@@ -14,6 +14,9 @@
 ### Added
 - Added `denyTools` agent configuration to inherit a child Pi session's normal tool set while removing specific builtin or direct MCP tools, with support in frontmatter, management config, builtin overrides, foreground runs, and async runs.
 
+### Changed
+- Explicit subagent `skills` now load through Pi's normal skill discovery/resource path instead of appending full `SKILL.md` bodies to child system prompts.
+
 ### Fixed
 
 ## [0.24.2] - 2026-05-10
