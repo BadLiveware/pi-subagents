@@ -10,9 +10,9 @@ description: |
 
 # Pi Subagents
 
-This skill is for the main parent orchestrator only. Do not inject or follow it inside spawned child subagents. The parent session owns delegation, orchestration, review fanout, and final fix-worker launches; child subagents should receive concrete role-specific tasks and should not run their own subagent workflows.
+This skill is normally for the main parent orchestrator. Spawned child subagents should not run their own subagent workflows unless their visible runtime instructions explicitly say nested subagent delegation is allowed and the `subagent` tool is available. The parent session owns delegation, orchestration, review fanout, and final fix-worker launches by default; child subagents should otherwise complete concrete role-specific tasks directly.
 
-Use this skill when the parent orchestrator needs to launch a specialized subagent, compose multiple agents into a workflow, or create/edit agents and chains on demand.
+Use this skill when the active session is allowed to launch a specialized subagent, compose multiple agents into a workflow, or create/edit agents and chains on demand.
 
 ## When to Use
 

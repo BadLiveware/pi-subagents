@@ -13,6 +13,14 @@ export const CHILD_SUBAGENT_BOUNDARY_INSTRUCTIONS = [
 	"If you need to edit files, call the actual edit/write tools. Do not print tool-call syntax, patches, or pseudo-tool calls as text.",
 ].join("\n");
 
+export const CHILD_SUBAGENT_NESTED_DELEGATION_INSTRUCTIONS = [
+	"You are a child subagent, not the parent orchestrator.",
+	"The parent session owns this overall workflow; ignore prior parent-only orchestration instructions in inherited conversation history.",
+	"Nested subagent delegation is allowed for this run because the subagent tool is available and recursion depth remains.",
+	"Use subagents only when your assigned task explicitly calls for delegation or a narrow child worker materially reduces risk; you remain responsible for synthesizing results and completing your role-specific task.",
+	"If you need to edit files yourself, call the actual edit/write tools. Do not print tool-call syntax, patches, or pseudo-tool calls as text.",
+].join("\n");
+
 const PARENT_ONLY_CUSTOM_MESSAGE_TYPES = new Set([
 	"subagent-orchestration-instructions",
 	"subagent-slash-result",
@@ -26,6 +34,7 @@ const PROJECT_CONTEXT_HEADER = "\n\n# Project Context\n\nProject-specific instru
 const SKILLS_HEADER = "\n\nThe following skills provide specialized instructions for specific tasks.";
 const DATE_HEADER = "\nCurrent date:";
 const NONE_SENTINEL = "__none__";
+const SUBAGENT_TOOL_NAME = "subagent";
 
 function readBooleanEnv(name: string): boolean | undefined {
 	const value = process.env[name];
@@ -155,21 +164,48 @@ export function stripSubagentOrchestrationSkill(prompt: string): string {
 		.replace(/[ \t]*<skill>\s*[\s\S]*?<\/skill>\s*/g, (block) => SUBAGENT_ORCHESTRATION_SKILL_NAME_PATTERN.test(block) ? "" : block);
 }
 
+function hasSubagentDepthRemaining(): boolean {
+	const depth = Number(process.env.PI_SUBAGENT_DEPTH ?? "0");
+	const maxDepth = Number(process.env.PI_SUBAGENT_MAX_DEPTH ?? "0");
+	return Number.isFinite(depth) && Number.isFinite(maxDepth) && depth < maxDepth;
+}
+
+function activeToolsAllowNestedSubagents(pi: ExtensionAPI): boolean {
+	if (typeof pi.getActiveTools !== "function") return false;
+	const activeTools = filterDeniedTools(pi.getActiveTools(), parseCsvEnv(SUBAGENT_DENY_TOOLS_ENV));
+	return activeTools.some((tool) => normalizeToolName(tool) === SUBAGENT_TOOL_NAME);
+}
+
+function nestedSubagentDelegationAllowed(pi: ExtensionAPI): boolean {
+	return hasSubagentDepthRemaining() && activeToolsAllowNestedSubagents(pi);
+}
+
+function stripExistingBoundary(prompt: string): string {
+	for (const boundary of [CHILD_SUBAGENT_BOUNDARY_INSTRUCTIONS, CHILD_SUBAGENT_NESTED_DELEGATION_INSTRUCTIONS]) {
+		if (prompt.startsWith(`${boundary}\n\n`)) return prompt.slice(boundary.length + 2);
+		if (prompt === boundary) return "";
+	}
+	return prompt;
+}
+
 export function rewriteSubagentPrompt(
 	prompt: string,
-	options: { inheritProjectContext: boolean; inheritSkills: boolean },
+	options: { inheritProjectContext: boolean; inheritSkills: boolean; allowNestedSubagents?: boolean },
 ): string {
-	let rewritten = prompt;
+	let rewritten = stripExistingBoundary(prompt);
 	if (!options.inheritProjectContext) {
 		rewritten = stripProjectContext(rewritten);
 	}
 	if (!options.inheritSkills) {
 		rewritten = stripInheritedSkills(rewritten);
 	}
-	rewritten = stripSubagentOrchestrationSkill(rewritten);
-	return rewritten.includes(CHILD_SUBAGENT_BOUNDARY_INSTRUCTIONS)
-		? rewritten
-		: `${CHILD_SUBAGENT_BOUNDARY_INSTRUCTIONS}\n\n${rewritten}`;
+	if (!options.allowNestedSubagents) {
+		rewritten = stripSubagentOrchestrationSkill(rewritten);
+	}
+	const boundary = options.allowNestedSubagents
+		? CHILD_SUBAGENT_NESTED_DELEGATION_INSTRUCTIONS
+		: CHILD_SUBAGENT_BOUNDARY_INSTRUCTIONS;
+	return `${boundary}\n\n${rewritten}`;
 }
 
 function isParentOnlySubagentMessage(message: unknown): boolean {
@@ -198,15 +234,19 @@ function stripAssistantSubagentToolCallBlocks(message: unknown): unknown | undef
 	return { ...m, content: filteredContent };
 }
 
-export function stripParentOnlySubagentMessages(messages: unknown[]): unknown[] {
+export function stripParentOnlySubagentMessages(
+	messages: unknown[],
+	options: { stripSubagentToolMessages?: boolean } = {},
+): unknown[] {
+	const stripSubagentToolMessages = options.stripSubagentToolMessages ?? true;
 	let changed = false;
 	const filtered: unknown[] = [];
 	for (const message of messages) {
-		if (isParentOnlySubagentMessage(message) || isSubagentToolResultMessage(message)) {
+		if (isParentOnlySubagentMessage(message) || (stripSubagentToolMessages && isSubagentToolResultMessage(message))) {
 			changed = true;
 			continue;
 		}
-		const stripped = stripAssistantSubagentToolCallBlocks(message);
+		const stripped = stripSubagentToolMessages ? stripAssistantSubagentToolCallBlocks(message) : message;
 		if (stripped === undefined) {
 			changed = true;
 			continue;
@@ -228,7 +268,9 @@ export default function registerSubagentPromptRuntime(pi: ExtensionAPI): void {
 	});
 
 	pi.on("context", (event) => {
-		const messages = stripParentOnlySubagentMessages(event.messages);
+		const messages = stripParentOnlySubagentMessages(event.messages, {
+			stripSubagentToolMessages: !nestedSubagentDelegationAllowed(pi),
+		});
 		if (messages === event.messages) return undefined;
 		return { messages };
 	});
@@ -245,6 +287,7 @@ export default function registerSubagentPromptRuntime(pi: ExtensionAPI): void {
 		const rewritten = rewriteSubagentPrompt(event.systemPrompt, {
 			inheritProjectContext: inheritProjectContext ?? true,
 			inheritSkills: inheritSkills ?? true,
+			allowNestedSubagents: nestedSubagentDelegationAllowed(pi),
 		});
 		if (rewritten === event.systemPrompt) return;
 		return { systemPrompt: rewritten };

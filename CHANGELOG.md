@@ -18,6 +18,7 @@
 - Explicit subagent `skills` now load through Pi's normal skill discovery/resource path instead of appending full `SKILL.md` bodies to child system prompts.
 
 ### Fixed
+- Preserve configured nested subagent delegation by keeping `pi-subagents` guidance and subagent tool results when the child has remaining depth and the `subagent` tool is available.
 
 ## [0.24.2] - 2026-05-10
 

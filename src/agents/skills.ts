@@ -60,8 +60,6 @@ const LOAD_SKILLS_CACHE_TTL_MS = 5000;
 
 const CONFIG_DIR = ".pi";
 const AGENT_DIR = path.join(os.homedir(), ".pi", "agent");
-const SUBAGENT_ORCHESTRATION_SKILL = "pi-subagents";
-
 const SOURCE_PRIORITY: Record<SkillSource, number> = {
 	project: 700,
 	"project-settings": 650,
@@ -592,11 +590,6 @@ export function resolveSkillReferences(
 	for (const name of skillNames) {
 		const trimmed = name.trim();
 		if (!trimmed) continue;
-		if (trimmed === SUBAGENT_ORCHESTRATION_SKILL) {
-			missing.push(trimmed);
-			continue;
-		}
-
 		const location = resolveSkillPath(trimmed, cwd);
 		if (!location) {
 			missing.push(trimmed);
@@ -708,7 +701,6 @@ export function discoverAvailableSkills(cwd: string): Array<{
 }> {
 	const skills = getCachedSkills(cwd);
 	return skills
-		.filter((s) => s.name !== SUBAGENT_ORCHESTRATION_SKILL)
 		.map((s) => ({
 			name: s.name,
 			source: s.source,
