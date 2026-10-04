@@ -43,6 +43,22 @@ test("direct @earendil-works runtime imports are declared for CI installs", () =
 	assert.deepEqual(missing, []);
 });
 
+test("host-provided modules are wildcard peers, not runtime dependencies", () => {
+	const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf-8"));
+	const hostPackages = [
+		"@earendil-works/pi-agent-core",
+		"@earendil-works/pi-ai",
+		"@earendil-works/pi-coding-agent",
+		"@earendil-works/pi-tui",
+		"typebox",
+	];
+	for (const name of hostPackages) {
+		assert.equal(packageJson.dependencies?.[name], undefined, name);
+		assert.equal(packageJson.peerDependencies?.[name], "*", name);
+		assert.ok(packageJson.devDependencies?.[name], `${name} is needed for local tests`);
+	}
+});
+
 test("old pi package scope is not used by source or tests", () => {
 	for (const file of [...collectTsFiles(path.join(projectRoot, "src")), ...collectTsFiles(path.join(projectRoot, "test"))]) {
 		const source = fs.readFileSync(file, "utf-8");
